@@ -33,6 +33,7 @@ import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrame;
 import io.netty.buffer.ByteBuf;
 import lavalink.server.io.SocketContext;
 import lavalink.server.io.SocketServer;
+import lavalink.server.player.filters.FilterChain;
 import moe.kyokobot.koe.VoiceConnection;
 import moe.kyokobot.koe.media.OpusAudioFrameProvider;
 import org.json.JSONObject;
@@ -55,6 +56,7 @@ public class Player extends AudioEventAdapter {
     private ScheduledFuture<?> myFuture = null;
     private final EqualizerFactory equalizerFactory = new EqualizerFactory();
     private boolean isEqualizerApplied = false;
+    private FilterChain filters;
 
     public Player(SocketContext socketContext, String guildId, AudioPlayerManager audioPlayerManager) {
         this.socketContext = socketContext;
@@ -166,6 +168,16 @@ public class Player extends AudioEventAdapter {
                 SocketServer.Companion.sendPlayerUpdate(socketContext, this);
             }, 0, 5, TimeUnit.SECONDS);
         }
+    }
+
+    @Nullable
+    public FilterChain getFilters() {
+        return filters;
+    }
+
+    public void setFilters(FilterChain filters) {
+        this.filters = filters;
+        player.setFilterFactory(filters);
     }
 
     public void provideTo(VoiceConnection connection) {
