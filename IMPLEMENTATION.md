@@ -5,12 +5,6 @@ The Java client has support for JDA, but can also be adapted to work with other 
 ## Requirements
 * You must be able to send messages via a shard's mainWS connection.
 * You must be able to intercept voice server updates from mainWS on your shard connection.
-* One of the following WS drafts (all but RFC 6455 is deprecated but should work):
-    * RFC 6455
-    * Hybi 17
-    * Hybi 10
-    * Hixie 76
-    * Hixie 75
 
 ## Significant changes v3.0 -> v4.0
 The `error` string on the `TrackExceptionEvent` has been deprecated and replaced by 
@@ -67,9 +61,13 @@ Provide an intercepted voice server update. This causes the server to connect to
 ```
 
 Cause the player to play a track.
+
 `startTime` is an optional setting that determines the number of milliseconds to offset the track by. Defaults to 0.
+
 `endTime` is an optional setting that determines at the number of milliseconds at which point the track should stop playing. Helpful if you only want to play a snippet of a bigger track. By default the track plays until it's end as per the encoded data.
-`noReplace` if set to true, this operation will be ignored if a track is already playing or paused.
+
+If `noReplace` is set to true, this operation will be ignored if a track is already playing or paused.
+
 ```json
 {
     "op": "play",
@@ -235,9 +233,10 @@ Server emitted an event. See the client implementation below.
 /**
  * Implementation details:
  * The only events extending {@link lavalink.client.player.event.PlayerEvent} produced by the remote server are these:
- * 1. TrackEndEvent
- * 2. TrackExceptionEvent
- * 3. TrackStuckEvent
+ * 1. TrackStartEvent
+ * 2. TrackEndEvent
+ * 3. TrackExceptionEvent
+ * 4. TrackStuckEvent
  * <p>
  * The remaining lavaplayer events are caused by client actions, and are therefore not forwarded via WS.
  */
@@ -246,6 +245,11 @@ private void handleEvent(JSONObject json) throws IOException {
     PlayerEvent event = null;
 
     switch (json.getString("type")) {
+        case "TrackStartEvent":
+                event = new TrackStartEvent(player,
+                        LavalinkUtil.toAudioTrack(json.getString("track"))
+                );
+                break;
         case "TrackEndEvent":
             event = new TrackEndEvent(player,
                     LavalinkUtil.toAudioTrack(json.getString("track")),
@@ -296,7 +300,7 @@ See the [Discord docs](https://discordapp.com/developers/docs/topics/opcodes-and
 }
 ```
 
-### REST API
+### Track Loading API
 The REST api is used to resolve audio tracks for use with the `play` op. 
 ```
 GET /loadtracks?identifier=dQw4w9WgXcQ HTTP/1.1
@@ -363,6 +367,95 @@ A severity level of `COMMON` indicates that the error is non-fatal and that the 
   }
 }
 ```
+
+---
+### RoutePlanner API
+Additionally there are a few REST endpoints for the ip rotation extension
+#### RoutePlanner Status
+```
+GET /routeplanner/status
+Host: localhost:8080
+Authorization: youshallnotpass
+```
+Response:
+```json
+{
+    "class": "RotatingNanoIpRoutePlanner",
+    "details": {
+        "ipBlock": {
+            "type": "Inet6Address",
+            "size": "1208925819614629174706176"
+        },
+        "failingAddresses": [
+            {
+                "address": "/1.0.0.0",
+                "failingTimestamp": 1573520707545,
+                "failingTime": "Mon Nov 11 20:05:07 EST 2019"
+            }
+        ],
+        "blockIndex": "0",
+        "currentAddressIndex": "36792023813"
+    }
+}
+```
+
+The response is different based on each route planner. 
+Fields which are always present are: `class`, `details.ipBlock` and 
+`details.failingAddresses`. If no route planner is set, both `class` and
+`details` will be null, and the other endpoints will result in status 500.
+
+The following classes have additional detail fields:
+
+#### RotatingIpRoutePlanner
+`details.rotateIndex` String containing the number of rotations which happened 
+since the restart of Lavalink
+
+`details.ipIndex` String containing the current offset in the block
+
+`details.currentAddress` The currently used ip address
+
+#### NanoIpRoutePlanner
+`details.currentAddressIndex` long representing the current offset in the ip 
+block
+
+#### RotatingNanoIpRoutePlanner
+`details.blockIndex` String containing the the information in which /64 block ips 
+are chosen. This number increases on each ban.
+
+`details.currentAddressIndex` long representing the current offset in the ip 
+block
+
+
+#### Unmark a failed address
+```
+POST /routeplanner/free/address
+Host: localhost:8080
+Authorization: youshallnotpass
+```
+
+Request Body:
+```json
+{
+    "address": "1.0.0.1"
+}
+```
+
+Response:
+
+204 - No Content
+
+#### Unmark all failed address
+```
+POST /routeplanner/free/all
+Host: localhost:8080
+Authorization: youshallnotpass
+```
+
+Response:
+
+204 - No Content
+
+---
 
 All REST responses from Lavalink include a `Lavalink-Api-Version` header.
 
